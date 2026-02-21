@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#7c83ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="description" content="Kairos — Tu asistente de productividad personal">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icons/icon-192.svg">
+    <link rel="apple-touch-icon" href="icons/icon-192.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <title>Kairos</title>
+</head>
+
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="app-header">
+            <button id="btn-analisis" class="header-btn" aria-label="Análisis">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="12" width="4" height="9" rx="1" fill="#7c83ff" />
+                    <rect x="10" y="7" width="4" height="14" rx="1" fill="#a5a8ff" />
+                    <rect x="17" y="3" width="4" height="18" rx="1" fill="#7c83ff" />
+                </svg>
+            </button>
+            <div class="header-points">
+                <span id="header-pts">0</span> pts
+            </div>
+            <button id="btn-ajustes" class="header-btn" aria-label="Ajustes">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="3" stroke="#7c83ff" stroke-width="2" />
+                    <path
+                        d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"
+                        stroke="#7c83ff" stroke-width="2" stroke-linecap="round" />
+                </svg>
+            </button>
+        </header>
+
+        <!-- Day Selector -->
+        <nav class="day-selector" id="day-selector">
+            <button data-day="lunes" class="day-btn">Lun</button>
+            <button data-day="martes" class="day-btn">Mar</button>
+            <button data-day="miercoles" class="day-btn">Mié</button>
+            <button data-day="jueves" class="day-btn">Jue</button>
+            <button data-day="viernes" class="day-btn">Vie</button>
+            <button data-day="sabado" class="day-btn">Sáb</button>
+            <button data-day="domingo" class="day-btn">Dom</button>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main id="main-content" class="main-content">
+            <!-- Dynamic content rendered here -->
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <button data-screen="tienda" class="nav-btn" id="nav-tienda">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 9h18l-1.5 9a2 2 0 01-2 1.5H6.5a2 2 0 01-2-1.5L3 9z" stroke="currentColor"
+                        stroke-width="2" />
+                    <path d="M6 9V6a6 6 0 0112 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <path d="M1 5h22l-1 4H2L1 5z" fill="currentColor" opacity="0.15" stroke="currentColor"
+                        stroke-width="2" />
+                </svg>
+                <span>Tienda</span>
+            </button>
+            <button data-screen="home" class="nav-btn active" id="nav-home">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1H4a1 1 0 01-1-1V10.5z" stroke="currentColor"
+                        stroke-width="2" fill="currentColor" opacity="0.15" />
+                    <rect x="9" y="14" width="6" height="8" rx="1" stroke="currentColor" stroke-width="2" />
+                </svg>
+                <span>Home</span>
+            </button>
+            <button data-screen="misiones" class="nav-btn" id="nav-misiones">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 6h16M4 10h16M4 14h10M4 18h8" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" />
+                </svg>
+                <span>Misiones</span>
+                <span class="nav-badge" id="missions-badge" style="display:none;">+0</span>
+            </button>
+        </nav>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/home.js"></script>
+    <script src="js/tienda.js"></script>
+    <script src="js/misiones.js"></script>
+    <script src="js/analisis.js"></script>
+    <script src="js/ajustes.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
