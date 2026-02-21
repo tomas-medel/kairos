@@ -1,5 +1,5 @@
 /* ========================================
-   KAIROS — Data Layer (localStorage)
+   KAIROS — Data Layer (localStorage) v2
    ======================================== */
 
 const DATA_KEY = 'kairos_data';
@@ -21,7 +21,7 @@ function getDefaultData() {
         tienda: [],
         misiones: [],
         historial: [],
-        misionesProgreso: {} // { misionId: { fecha: "YYYY-MM-DD", progreso: N, completada: bool } }
+        misionesProgreso: {}
     };
 }
 
@@ -30,7 +30,6 @@ function getData() {
         const raw = localStorage.getItem(DATA_KEY);
         if (!raw) return initDefaultData();
         const data = JSON.parse(raw);
-        // Ensure all keys exist
         const defaults = getDefaultData();
         for (const key of Object.keys(defaults)) {
             if (!(key in data)) data[key] = defaults[key];
@@ -57,7 +56,7 @@ function initDefaultData() {
 }
 
 /* ========================================
-   Utility: IDs
+   Utility
    ======================================== */
 function genId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -122,7 +121,9 @@ function updateActivity(dayName, id, updates) {
     if (idx >= 0) {
         data.schedule[dayName][idx] = { ...list[idx], ...updates };
         saveData(data);
+        return data.schedule[dayName][idx];
     }
+    return null;
 }
 
 function deleteActivity(dayName, id) {
@@ -144,6 +145,17 @@ function addShopItem(item) {
     data.tienda.push(item);
     saveData(data);
     return item;
+}
+
+function updateShopItem(id, updates) {
+    const data = getData();
+    const idx = data.tienda.findIndex(i => i.id === id);
+    if (idx >= 0) {
+        data.tienda[idx] = { ...data.tienda[idx], ...updates };
+        saveData(data);
+        return data.tienda[idx];
+    }
+    return null;
 }
 
 function deleteShopItem(id) {
@@ -169,6 +181,10 @@ function buyItem(id) {
 
 /* ========================================
    Missions CRUD
+   Mission frecuencia:
+     'diaria'   — se puede completar cada día (progreso se resetea a medianoche)
+     'unica'    — se completa una sola vez, no se resetea
+     'especial' — tiene fecha de expiración (fechaExpira: "YYYY-MM-DD")
    ======================================== */
 function getMissions() {
     return getData().misiones || [];
@@ -177,6 +193,7 @@ function getMissions() {
 function addMission(mission) {
     const data = getData();
     mission.id = genId();
+    if (!mission.frecuencia) mission.frecuencia = 'diaria';
     data.misiones.push(mission);
     saveData(data);
     return mission;
@@ -188,21 +205,32 @@ function updateMission(id, updates) {
     if (idx >= 0) {
         data.misiones[idx] = { ...data.misiones[idx], ...updates };
         saveData(data);
+        return data.misiones[idx];
     }
+    return null;
 }
 
 function deleteMission(id) {
     const data = getData();
     data.misiones = data.misiones.filter(m => m.id !== id);
-    // Also clean up progress
     delete data.misionesProgreso[id];
     saveData(data);
 }
 
 function getMissionProgress(missionId) {
     const data = getData();
+    const mission = data.misiones.find(m => m.id === missionId);
+    if (!mission) return { fecha: todayStr(), progreso: 0, completada: false };
+
     const today = todayStr();
     const prog = data.misionesProgreso[missionId];
+
+    // For unique missions: persist forever
+    if (mission.frecuencia === 'unica') {
+        return prog || { fecha: today, progreso: 0, completada: false };
+    }
+
+    // For daily missions: reset if it's a new day
     if (prog && prog.fecha === today) return prog;
     return { fecha: today, progreso: 0, completada: false };
 }
@@ -213,8 +241,18 @@ function incrementMission(missionId) {
     if (!mission) return null;
 
     const today = todayStr();
-    if (!data.misionesProgreso[missionId] || data.misionesProgreso[missionId].fecha !== today) {
-        data.misionesProgreso[missionId] = { fecha: today, progreso: 0, completada: false };
+    const existing = data.misionesProgreso[missionId];
+
+    // For daily/special: reset if new day
+    if (mission.frecuencia !== 'unica') {
+        if (!existing || existing.fecha !== today) {
+            data.misionesProgreso[missionId] = { fecha: today, progreso: 0, completada: false };
+        }
+    } else {
+        // For unique: keep old progress
+        if (!existing) {
+            data.misionesProgreso[missionId] = { fecha: today, progreso: 0, completada: false };
+        }
     }
 
     const prog = data.misionesProgreso[missionId];
@@ -244,13 +282,12 @@ function triggerNegativeMission(missionId) {
     if (!mission) return null;
 
     const today = todayStr();
-    if (!data.misionesProgreso[missionId] || data.misionesProgreso[missionId].fecha !== today) {
+    if (!data.misionesProgreso[missionId]) {
         data.misionesProgreso[missionId] = { fecha: today, progreso: 0, completada: false };
     }
-
     const prog = data.misionesProgreso[missionId];
     prog.progreso++;
-    data.puntos += mission.puntos; // puntos is negative for negative missions
+    data.puntos += mission.puntos; // negative value
     data.historial.push({
         fecha: today,
         tipo: 'mision',
@@ -269,4 +306,15 @@ function getPoints() {
 function getHistorial(startDate, endDate) {
     const data = getData();
     return (data.historial || []).filter(h => h.fecha >= startDate && h.fecha <= endDate);
+}
+
+/* ========================================
+   Reset Stats
+   ======================================== */
+function resetStats() {
+    const data = getData();
+    data.puntos = 0;
+    data.historial = [];
+    data.misionesProgreso = {};
+    saveData(data);
 }
