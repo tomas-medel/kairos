@@ -4,6 +4,9 @@
 
 let currentScreen = 'home';
 let selectedDay = null;
+let _swRegistration = null;
+let _alarmTickInterval = null;
+const _alarmTriggeredMap = {};
 
 /* ========================================
    Router
@@ -201,9 +204,152 @@ function showPointsPop(isPositive) {
 function registerSW() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js')
-            .then(reg => console.log('SW registered:', reg.scope))
+            .then(reg => {
+                _swRegistration = reg;
+                console.log('SW registered:', reg.scope);
+
+                reg.addEventListener('updatefound', () => {
+                    const installing = reg.installing;
+                    if (!installing) return;
+
+                    installing.addEventListener('statechange', () => {
+                        if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                            showModal(`
+                              <h3>Actualización disponible</h3>
+                              <p style="color:var(--text-secondary);margin-bottom:var(--space-md);">
+                                Hay una nueva versión de Kairos disponible.
+                              </p>
+                              <button class="btn-primary" onclick="applyAppUpdate()">Actualizar ahora</button>
+                              <button class="btn-secondary" onclick="closeModal()">Después</button>
+                            `);
+                        }
+                    });
+                });
+
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (!window.__kairosReloadingForUpdate) {
+                        window.__kairosReloadingForUpdate = true;
+                        window.location.reload();
+                    }
+                });
+            })
             .catch(err => console.log('SW registration failed:', err));
     }
+}
+
+function ensureReminderPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => { });
+    }
+}
+
+function _playReminderTone() {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.value = 0.0001;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+        osc.stop(ctx.currentTime + 0.38);
+        setTimeout(() => ctx.close && ctx.close(), 500);
+    } catch (e) { }
+}
+
+function _notifyReminder(activity, minutesBefore) {
+    const title = minutesBefore > 0 ? '⏰ Recordatorio Kairos' : '⏰ Actividad comienza ahora';
+    const body = minutesBefore > 0
+        ? `${activity.nombre} empieza en ${minutesBefore} min (${activity.horaInicio})`
+        : `${activity.nombre} comenzó (${activity.horaInicio})`;
+
+    showToast(body);
+    if (navigator.vibrate) navigator.vibrate([180, 100, 180]);
+    _playReminderTone();
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            new Notification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' });
+        } catch (e) { }
+    }
+}
+
+function checkActivityReminders() {
+    const todayName = getDayName();
+    const now = getCurrentTimeMinutes();
+    const dateKey = todayStr();
+    const activities = getActivities(todayName);
+
+    activities.forEach(act => {
+        if (!act || !act.reminderEnabled) return;
+        const reminderMinutes = Math.max(0, parseInt(act.reminderMinutes || 0, 10) || 0);
+        const start = timeToMinutes(act.horaInicio);
+        const triggerMinute = Math.max(0, start - reminderMinutes);
+        const alarmKey = `${dateKey}:${todayName}:${act.id}:${triggerMinute}`;
+
+        if (now >= triggerMinute && now < triggerMinute + 1) {
+            if (_alarmTriggeredMap[alarmKey]) return;
+            _alarmTriggeredMap[alarmKey] = true;
+            _notifyReminder(act, reminderMinutes);
+        }
+    });
+}
+
+function checkForAppUpdate() {
+    if (!('serviceWorker' in navigator)) {
+        showToast('Este dispositivo no soporta actualizaciones PWA');
+        return;
+    }
+
+    const registrationPromise = _swRegistration
+        ? Promise.resolve(_swRegistration)
+        : navigator.serviceWorker.getRegistration();
+
+    registrationPromise.then(reg => {
+        if (!reg) {
+            showToast('Service Worker no registrado');
+            return;
+        }
+
+        _swRegistration = reg;
+
+        if (reg.waiting) {
+            applyAppUpdate();
+            return;
+        }
+
+        reg.update()
+            .then(() => {
+                setTimeout(() => {
+                    if (reg.waiting) {
+                        applyAppUpdate();
+                    } else {
+                        showToast('Ya tienes la versión más reciente');
+                    }
+                }, 800);
+            })
+            .catch(() => showToast('No se pudo buscar actualizaciones'));
+    });
+}
+
+function applyAppUpdate() {
+    const reg = _swRegistration;
+    closeModal();
+
+    if (reg && reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        showToast('Actualizando aplicación...');
+        return;
+    }
+
+    window.location.reload();
 }
 
 /* ========================================
@@ -216,6 +362,12 @@ function startAutoRefresh() {
             renderHome(selectedDay);
         }
     }, 60000);
+}
+
+function startReminderLoop() {
+    if (_alarmTickInterval) clearInterval(_alarmTickInterval);
+    checkActivityReminders();
+    _alarmTickInterval = setInterval(checkActivityReminders, 15000);
 }
 
 /* ========================================
@@ -291,9 +443,11 @@ function init() {
 
     // Auto-refresh
     startAutoRefresh();
+    startReminderLoop();
 
     // PWA install prompt
     initInstallPrompt();
+    ensureReminderPermission();
 }
 
 // Start app when DOM is ready

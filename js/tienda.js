@@ -40,9 +40,9 @@ function renderTienda() {
     });
 
     html += `
-    <button class="btn-add" onclick="openShopModal()">
-      + Agregar recompensa
-    </button>
+    <p style="text-align:center;color:var(--text-secondary);margin-top:var(--space-md);">
+      Las recompensas se gestionan desde Ajustes → Tienda.
+    </p>
   `;
 
     container.innerHTML = html;

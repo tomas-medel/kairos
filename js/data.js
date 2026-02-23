@@ -132,6 +132,41 @@ function deleteActivity(dayName, id) {
     saveData(data);
 }
 
+function copyActivityToDays(sourceDay, id, targetDays) {
+    const data = getData();
+    const sourceList = data.schedule[sourceDay] || [];
+    const source = sourceList.find(a => a.id === id);
+    if (!source) return { copied: 0, skipped: 0 };
+
+    const uniqueDays = [...new Set((targetDays || []).filter(Boolean))];
+    let copied = 0;
+    let skipped = 0;
+
+    uniqueDays.forEach(dayName => {
+        if (!data.schedule[dayName]) data.schedule[dayName] = [];
+
+        const duplicate = data.schedule[dayName].some(a =>
+            a.nombre === source.nombre &&
+            a.horaInicio === source.horaInicio &&
+            a.horaFin === source.horaFin
+        );
+
+        if (duplicate) {
+            skipped++;
+            return;
+        }
+
+        data.schedule[dayName].push({
+            ...source,
+            id: genId()
+        });
+        copied++;
+    });
+
+    saveData(data);
+    return { copied, skipped };
+}
+
 /* ========================================
    Shop CRUD
    ======================================== */

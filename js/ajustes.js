@@ -74,6 +74,7 @@ function renderSettingsCalendar() {
           <div class="item-detail">${act.horaInicio} – ${act.horaFin}${act.recurrente ? ' · Recurrente' : ''}</div>
         </div>
         <div style="display:flex;gap:6px;">
+          <button class="btn-icon-edit" title="Copiar a otros dias" onclick="openCopyActivityModal('${_settingsDay}','${act.id}')">Copiar</button>
           <button class="btn-icon-edit" onclick="openEditActivityModal('${_settingsDay}','${act.id}')">✏️</button>
           <button class="btn-icon-del" onclick="handleDeleteActivity('${_settingsDay}','${act.id}')">🗑️</button>
         </div>
@@ -134,6 +135,20 @@ function openActivityModal(prefillId) {
       <span class="toggle-label">Recurrente (todas las semanas)</span>
       <div class="toggle-switch ${act && act.recurrente ? 'active' : ''}" id="modal-recurrente" onclick="this.classList.toggle('active')"></div>
     </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Recordatorio / alarma</span>
+      <div class="toggle-switch ${act && act.reminderEnabled ? 'active' : ''}" id="modal-reminder-enabled" onclick="toggleReminderConfig()"></div>
+    </div>
+    <div class="form-group" id="modal-reminder-config" style="display:${act && act.reminderEnabled ? 'block' : 'none'};">
+      <label>Recordar antes de empezar</label>
+      <select class="form-input" id="modal-reminder-minutes">
+        <option value="0" ${(act && Number(act.reminderMinutes) === 0) ? 'selected' : ''}>A la hora exacta</option>
+        <option value="5" ${(!act || Number(act.reminderMinutes || 5) === 5) ? 'selected' : ''}>5 minutos antes</option>
+        <option value="10" ${(act && Number(act.reminderMinutes) === 10) ? 'selected' : ''}>10 minutos antes</option>
+        <option value="15" ${(act && Number(act.reminderMinutes) === 15) ? 'selected' : ''}>15 minutos antes</option>
+        <option value="30" ${(act && Number(act.reminderMinutes) === 30) ? 'selected' : ''}>30 minutos antes</option>
+      </select>
+    </div>
     <button class="btn-primary" onclick="${isEdit ? `saveEditActivity('${_settingsDay}','${act.id}')` : 'saveActivity()'}">
       ${isEdit ? 'Guardar cambios' : 'Agregar'}
     </button>
@@ -155,17 +170,73 @@ function openEditActivityModal(day, id) {
   openActivityModal(id);
 }
 
+function toggleReminderConfig() {
+  const toggle = document.getElementById('modal-reminder-enabled');
+  const config = document.getElementById('modal-reminder-config');
+  if (!toggle || !config) return;
+  toggle.classList.toggle('active');
+  config.style.display = toggle.classList.contains('active') ? 'block' : 'none';
+}
+
+function openCopyActivityModal(day, id) {
+  const act = getActivities(day).find(a => a.id === id);
+  if (!act) { showToast('Actividad no encontrada'); return; }
+
+  const days = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+
+  showModal(`
+    <h3>Copiar actividad</h3>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:var(--space-md);">
+      <strong>${act.nombre}</strong> (${act.horaInicio} - ${act.horaFin})<br>
+      Selecciona uno o varios dias destino.
+    </p>
+    <div class="form-group">
+      <label>Dias destino</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        ${days.map(d => `
+          <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;">
+            <input type="checkbox" class="copy-day-check" value="${d}" ${d === day ? 'disabled' : ''}>
+            <span>${getDayLabel(d)}${d === day ? ' (origen)' : ''}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    <button class="btn-primary" onclick="confirmCopyActivity('${day}','${id}')">Copiar</button>
+    <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+  `);
+}
+
+function confirmCopyActivity(day, id) {
+  const targetDays = Array.from(document.querySelectorAll('.copy-day-check:checked')).map(el => el.value);
+  if (targetDays.length === 0) { showToast('Selecciona al menos un dia'); return; }
+
+  const result = copyActivityToDays(day, id, targetDays);
+  closeModal();
+  renderAjustes();
+
+  if (result.copied === 0) {
+    showToast('No se copiaron actividades');
+  } else if (result.skipped > 0) {
+    showToast(`Copiadas: ${result.copied} · Omitidas: ${result.skipped}`);
+  } else {
+    showToast(`Actividad copiada a ${result.copied} dia(s)`);
+  }
+}
+
 function saveActivity() {
   const nombre = document.getElementById('modal-name').value.trim();
   const horaInicio = document.getElementById('modal-start').value;
   const horaFin = document.getElementById('modal-end').value;
   const recurrente = document.getElementById('modal-recurrente').classList.contains('active');
+  const reminderEnabled = document.getElementById('modal-reminder-enabled')?.classList.contains('active') || false;
+  const reminderMinutes = parseInt(document.getElementById('modal-reminder-minutes')?.value || '5', 10) || 0;
   const emoji = getSelectedEmoji() || '📌';
 
   if (!nombre || !horaInicio || !horaFin) { showToast('Completa todos los campos'); return; }
   if (timeToMinutes(horaFin) <= timeToMinutes(horaInicio)) { showToast('La hora de fin debe ser mayor'); return; }
 
-  addActivity(_settingsDay, { nombre, emoji, horaInicio, horaFin, recurrente });
+  addActivity(_settingsDay, { nombre, emoji, horaInicio, horaFin, recurrente, reminderEnabled, reminderMinutes });
+  if (reminderEnabled && typeof ensureReminderPermission === 'function') ensureReminderPermission();
   closeModal();
   renderAjustes();
   showToast('Actividad agregada ✨');
@@ -176,12 +247,15 @@ function saveEditActivity(day, id) {
   const horaInicio = document.getElementById('modal-start').value;
   const horaFin = document.getElementById('modal-end').value;
   const recurrente = document.getElementById('modal-recurrente').classList.contains('active');
+  const reminderEnabled = document.getElementById('modal-reminder-enabled')?.classList.contains('active') || false;
+  const reminderMinutes = parseInt(document.getElementById('modal-reminder-minutes')?.value || '5', 10) || 0;
   const emoji = getSelectedEmoji() || '📌';
 
   if (!nombre || !horaInicio || !horaFin) { showToast('Completa todos los campos'); return; }
   if (timeToMinutes(horaFin) <= timeToMinutes(horaInicio)) { showToast('La hora de fin debe ser mayor'); return; }
 
-  updateActivity(day, id, { nombre, emoji, horaInicio, horaFin, recurrente });
+  updateActivity(day, id, { nombre, emoji, horaInicio, horaFin, recurrente, reminderEnabled, reminderMinutes });
+  if (reminderEnabled && typeof ensureReminderPermission === 'function') ensureReminderPermission();
   closeModal();
   renderAjustes();
   showToast('Actividad actualizada ✅');
@@ -471,6 +545,15 @@ function renderSettingsAccount() {
         <div class="item-detail">${(data.historial || []).length} registros guardados</div>
       </div>
     </div>
+
+    <div style="margin-top: var(--space-lg);">
+      <button class="btn-secondary" onclick="checkForAppUpdate()">
+        🔄 Buscar actualizaciones de la app
+      </button>
+    </div>
+    <p style="text-align:center;font-size:0.75rem;color:var(--text-secondary);margin-top:var(--space-sm);">
+      Trae cambios publicados (por ejemplo, cambios subidos a GitHub y desplegados).
+    </p>
 
     <div style="margin-top: var(--space-lg);">
       <button class="btn-danger-outline" onclick="openResetConfirm()">

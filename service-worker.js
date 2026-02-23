@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kairos-v2';
+const CACHE_NAME = 'kairos-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -34,6 +34,12 @@ self.addEventListener('activate', event => {
       ))
       .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Fetch — cache first, then network fallback
